@@ -4,6 +4,7 @@
       <title>Authn | <%= process.env.SITE_NAME %></title>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <link rel="stylesheet" href="<%=htmlWebpackPlugin.options.MFE_STATIC_CSS_DOMAIN%>/css/mfe.css" />
       <% if (process.env.OPTIMIZELY_URL) { %>
         <script
           src="<%= process.env.OPTIMIZELY_URL %>"
