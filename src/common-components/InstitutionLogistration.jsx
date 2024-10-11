@@ -1,13 +1,16 @@
 import React from 'react';
 
 import { getConfig } from '@edx/frontend-platform';
-import { injectIntl, intlShape } from '@edx/frontend-platform/i18n';
-import { Button, Hyperlink, Icon } from '@edx/paragon';
-import { Institution } from '@edx/paragon/icons';
+import { useIntl } from '@edx/frontend-platform/i18n';
+import { Button, Hyperlink, Icon } from '@openedx/paragon';
+import { Institution } from '@openedx/paragon/icons';
 import PropTypes from 'prop-types';
 
 import messages from './messages';
 
+/**
+ * This component renders the Institution login button
+ * */
 export const RenderInstitutionButton = props => {
   const { onSubmitHandler, buttonTitle } = props;
 
@@ -24,10 +27,13 @@ export const RenderInstitutionButton = props => {
   );
 };
 
+/**
+ * This component renders the page list of available institutions for login
+ * */
 const InstitutionLogistration = props => {
   const lmsBaseUrl = getConfig().LMS_BASE_URL;
+  const { formatMessage } = useIntl();
   const {
-    intl,
     secondaryProviders,
     headingTitle,
   } = props;
@@ -36,11 +42,11 @@ const InstitutionLogistration = props => {
     <>
       <div className="d-flex justify-content-left mb-4 mt-2">
         <div className="flex-column">
-          <h4 className="mb-2 font-weight-bold institute-heading">
+          <h4 className="mb-2 font-weight-bold institutions__heading">
             {headingTitle}
           </h4>
           <p className="mb-2">
-            {intl.formatMessage(messages['institution.login.page.sub.heading'])}
+            {formatMessage(messages['institution.login.page.sub.heading'])}
           </p>
         </div>
       </div>
@@ -51,7 +57,7 @@ const InstitutionLogistration = props => {
               <tr key={provider} className="pgn__data-table-row">
                 <td>
                   <Hyperlink
-                    className="btn nav-item p-0 mb-1 secondary-provider-link"
+                    className="btn nav-item p-0 mb-1 institutions--provider-link"
                     destination={lmsBaseUrl + provider.loginUrl}
                   >
                     {provider.name}
@@ -89,7 +95,6 @@ RenderInstitutionButton.defaultProps = {
 
 InstitutionLogistration.propTypes = {
   ...LogistrationProps,
-  intl: intlShape.isRequired,
   headingTitle: PropTypes.string,
 };
 InstitutionLogistration.defaultProps = {
@@ -97,4 +102,4 @@ InstitutionLogistration.defaultProps = {
   headingTitle: '',
 };
 
-export default injectIntl(InstitutionLogistration);
+export default InstitutionLogistration;

@@ -22,35 +22,10 @@ const messages = defineMessages({
     defaultMessage: 'Sign in',
     description: 'Sign in button label that appears on login page',
   },
-  'sign.in.btn.pending.state': {
-    id: 'sign.in.btn.pending.state',
-    defaultMessage: 'Loading',
-    description: 'Title of icon that appears when button is in pending state',
-  },
-  'need.help.signing.in.collapsible.menu': {
-    id: 'need.help.signing.in.collapsible.menu',
-    defaultMessage: 'Need help signing in?',
-    description: 'A button for collapsible need help signing in menu on login page',
-  },
-  'forgot.password.link': {
-    id: 'forgot.password.link',
-    defaultMessage: 'Forgot my password',
-    description: 'Forgot password link',
-  },
   'forgot.password': {
     id: 'forgot.password',
     defaultMessage: 'Forgot password',
     description: 'Button text for forgot password',
-  },
-  'other.sign.in.issues': {
-    id: 'other.sign.in.issues',
-    defaultMessage: 'Other sign in issues',
-    description: 'A link that redirects to sign-in issues help',
-  },
-  'need.other.help.signing.in.collapsible.menu': {
-    id: 'need.other.help.signing.in.collapsible.menu',
-    defaultMessage: 'Need other help signing in?',
-    description: 'A button for collapsible need other help signing in menu on forgot password page',
   },
   'institution.login.button': {
     id: 'institution.login.button',
@@ -66,21 +41,6 @@ const messages = defineMessages({
     id: 'institution.login.page.sub.heading',
     defaultMessage: 'Choose your institution from the list below',
     description: 'Heading of the institutions list',
-  },
-  'institution.login.page.back.button': {
-    id: 'institution.login.page.back.button',
-    defaultMessage: 'Back to sign in',
-    description: 'return to login page',
-  },
-  'create.an.account': {
-    id: 'create.an.account',
-    defaultMessage: 'Create an account',
-    description: 'Message on button to return to register page',
-  },
-  'login.other.options.heading': {
-    id: 'login.other.options.heading',
-    defaultMessage: 'Or sign in with:',
-    description: 'Text that appears above other sign in options like social auth buttons',
   },
   'non.compliant.password.title': {
     id: 'non.compliant.password.title',
@@ -99,30 +59,10 @@ const messages = defineMessages({
     defaultMessage: 'To protect your account, it\'s been temporarily locked. Try again in 30 minutes.',
     description: 'Part of message for when user account has been locked out after multiple failed login attempts',
   },
-  'first.time.here': {
-    id: 'first.time.here',
-    defaultMessage: 'First time here?',
-    description: 'A question that appears before sign up link',
-  },
-  'email.help.message': {
-    id: 'email.help.message',
-    defaultMessage: 'The email address you used to register with edX.',
-    description: 'Message that appears below email field on login page',
-  },
-  'enterprise.login.btn.text': {
-    id: 'enterprise.login.btn.text',
-    defaultMessage: 'Company or school credentials',
-    description: 'Company or school login link text.',
-  },
-  'email.format.validation.message': {
-    id: 'email.format.validation.message',
-    defaultMessage: 'The email address you\'ve provided isn\'t formatted correctly.',
-    description: 'Validation message that appears when email address format is incorrect',
-  },
   'username.or.email.format.validation.less.chars.message': {
     id: 'username.or.email.format.validation.less.chars.message',
-    defaultMessage: 'Username or email must have at least 3 characters.',
-    description: 'Validation message that appears when username or email address is less than 3 characters',
+    defaultMessage: 'Username or email must have at least 2 characters.',
+    description: 'Validation message that appears when username or email address is less than 2 characters',
   },
   'email.validation.message': {
     id: 'email.validation.message',
@@ -133,16 +73,6 @@ const messages = defineMessages({
     id: 'password.validation.message',
     defaultMessage: 'Enter your password',
     description: 'Validation message that appears when password is empty',
-  },
-  'register.link': {
-    id: 'register.link',
-    defaultMessage: 'Create an account',
-    description: 'Register page link',
-  },
-  'sign.in.heading': {
-    id: 'sign.in.heading',
-    defaultMessage: 'Sign in',
-    description: 'Sign in text',
   },
   // Account Activation Strings
   'account.activation.success.message.title': {
@@ -170,11 +100,6 @@ const messages = defineMessages({
     defaultMessage: 'contact support',
     description: 'Link text used in account activation error message to go to learner help center',
   },
-  'tpa.account.link': {
-    id: 'tpa.account.link',
-    defaultMessage: '{provider} account',
-    description: 'Link text error message used to go to SSO when staff user try to login through password.',
-  },
   // Email Confirmation Strings
   'account.confirmation.success.message.title': {
     id: 'account.confirmation.success.message.title',
@@ -195,6 +120,11 @@ const messages = defineMessages({
     id: 'account.confirmation.error.message.title',
     defaultMessage: 'Your email could not be confirmed',
     description: 'Account verification error message title',
+  },
+  'tpa.account.link': {
+    id: 'tpa.account.link',
+    defaultMessage: '{provider} account',
+    description: 'Link text error message used to go to SSO when staff user try to login through password.',
   },
   'internal.server.error.message': {
     id: 'internal.server.error.message',
@@ -220,16 +150,6 @@ const messages = defineMessages({
     id: 'login.incorrect.credentials.error',
     defaultMessage: 'The username, email, or password you entered is incorrect. Please try again.',
     description: 'Error message for incorrect email or password',
-  },
-  'login.failed.attempt.error': {
-    id: 'login.failed.attempt.error',
-    defaultMessage: 'You have {remainingAttempts} more sign in attempts before your account is temporarily locked.',
-    description: 'Failed login attempts error message',
-  },
-  'login.locked.out.error.message': {
-    id: 'login.locked.out.error.message',
-    defaultMessage: 'To protect your account, it’s been temporarily locked. Try again in {lockedOutPeriod} minutes.',
-    description: 'Account locked out user message',
   },
   'login.form.invalid.error.message': {
     id: 'login.form.invalid.error.message',
@@ -278,6 +198,13 @@ const messages = defineMessages({
     id: 'password.security.redirect.to.reset.password.button',
     defaultMessage: 'Reset your password',
     description: 'Button to redirect users to Reset Password page',
+  },
+  'login.tpa.authentication.failure': {
+    id: 'login.tpa.authentication.failure',
+    defaultMessage: 'We are sorry, you are not authorized to access {platform_name} via this channel. '
+        + 'Please contact your learning administrator or manager in order to access {platform_name}.'
+        + '{lineBreak}{lineBreak}Error Details:{lineBreak}{errorMessage}',
+    description: 'Error message third party authentication pipeline fails',
   },
 });
 

@@ -1,4 +1,4 @@
-import { camelCaseObject, convertKeyNames, getConfig } from '@edx/frontend-platform';
+import { getConfig } from '@edx/frontend-platform';
 import { getAuthenticatedHttpClient } from '@edx/frontend-platform/auth';
 
 // eslint-disable-next-line import/prefer-default-export
@@ -18,12 +18,8 @@ export async function getThirdPartyAuthContext(urlParams) {
       throw (e);
     });
   return {
-    fieldDescriptions: data.registration_fields || {},
-    optionalFields: data.optional_fields || {},
-    // For backward compatibility with the API, once https://github.com/openedx/edx-platform/pull/30198 is merged
-    // and deployed update it to use data.context_data
-    thirdPartyAuthContext: camelCaseObject(
-      convertKeyNames(data.context_data || data, { fullname: 'name' }),
-    ),
+    fieldDescriptions: data.registrationFields || {},
+    optionalFields: data.optionalFields || {},
+    thirdPartyAuthContext: data.contextData || {},
   };
 }

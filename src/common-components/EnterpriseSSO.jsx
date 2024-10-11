@@ -1,21 +1,26 @@
 import React from 'react';
 
 import { getConfig } from '@edx/frontend-platform';
-import { injectIntl, intlShape } from '@edx/frontend-platform/i18n';
+import { useIntl } from '@edx/frontend-platform/i18n';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   Button, Form,
-} from '@edx/paragon';
-import { faSignInAlt } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+  Icon,
+} from '@openedx/paragon';
+import { Login } from '@openedx/paragon/icons';
 import PropTypes from 'prop-types';
 
-import { LOGIN_PAGE, SUPPORTED_ICON_CLASSES } from '../data/constants';
 import messages from './messages';
+import { LOGIN_PAGE, SUPPORTED_ICON_CLASSES } from '../data/constants';
 
+/**
+ * This component renders the Single sign-on (SSO) button only for the tpa provider passed
+ * */
 const EnterpriseSSO = (props) => {
-  const { intl } = props;
+  const { formatMessage } = useIntl();
   const tpaProvider = props.provider;
-  const disablePublicAccountCreation = getConfig().ALLOW_PUBLIC_ACCOUNT_CREATION === false;
+  const hideRegistrationLink = getConfig().ALLOW_PUBLIC_ACCOUNT_CREATION === false
+    || getConfig().SHOW_REGISTRATION_LINKS === false;
 
   const handleSubmit = (e, url) => {
     e.preventDefault();
@@ -33,7 +38,7 @@ const EnterpriseSSO = (props) => {
         <div className="d-flex flex-column">
           <div className="mw-450">
             <Form className="m-0">
-              <p>{intl.formatMessage(messages['enterprisetpa.title.heading'], { providerName: tpaProvider.name })}</p>
+              <p>{formatMessage(messages['enterprisetpa.title.heading'], { providerName: tpaProvider.name })}</p>
               <Button
                 id={tpaProvider.id}
                 key={tpaProvider.id}
@@ -44,16 +49,18 @@ const EnterpriseSSO = (props) => {
               >
                 {tpaProvider.iconImage ? (
                   <div aria-hidden="true">
-                    <img className="icon-image" src={tpaProvider.iconImage} alt={`icon ${tpaProvider.name}`} />
+                    <img className="btn-tpa__image-icon" src={tpaProvider.iconImage} alt={`icon ${tpaProvider.name}`} />
                     <span className="pl-2" aria-hidden="true">{ tpaProvider.name }</span>
                   </div>
                 )
                   : (
                     <>
-                      <div className="font-container" aria-hidden="true">
-                        <FontAwesomeIcon
-                          icon={SUPPORTED_ICON_CLASSES.includes(tpaProvider.iconClass) ? ['fab', tpaProvider.iconClass] : faSignInAlt}
-                        />
+                      <div className="btn-tpa__font-container" aria-hidden="true">
+                        {SUPPORTED_ICON_CLASSES.includes(tpaProvider.iconClass) ? (
+                          <FontAwesomeIcon icon={['fab', tpaProvider.iconClass]} />)
+                          : (
+                            <Icon className="h-75" src={Login} />
+                          )}
                       </div>
                       <span className="pl-2" aria-hidden="true">{ tpaProvider.name }</span>
                     </>
@@ -68,9 +75,9 @@ const EnterpriseSSO = (props) => {
                 className="w-100"
                 onClick={(e) => handleClick(e)}
               >
-                {disablePublicAccountCreation
-                  ? intl.formatMessage(messages['enterprisetpa.login.button.text.public.account.creation.disabled'])
-                  : intl.formatMessage(messages['enterprisetpa.login.button.text'])}
+                {hideRegistrationLink
+                  ? formatMessage(messages['enterprisetpa.login.button.text.public.account.creation.disabled'])
+                  : formatMessage(messages['enterprisetpa.login.button.text'])}
               </Button>
             </Form>
           </div>
@@ -101,7 +108,6 @@ EnterpriseSSO.propTypes = {
     loginUrl: PropTypes.string,
     registerUrl: PropTypes.string,
   }),
-  intl: intlShape.isRequired,
 };
 
-export default injectIntl(EnterpriseSSO);
+export default EnterpriseSSO;

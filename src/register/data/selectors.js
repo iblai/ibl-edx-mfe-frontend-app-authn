@@ -1,30 +1,24 @@
 import { createSelector } from 'reselect';
 
-export const storeName = 'register';
+/**
+ * Selector for backend validations which processes the api output and generates a
+ * key value dict for field errors.
+ * @returns {{username: string}|{name: string}|*|{}|null}
+ */
+const getRegistrationError = state => state.register.registrationError;
+const getValidations = state => state.register.validations;
 
-export const registerSelector = state => ({ ...state[storeName] });
-
-export const registrationRequestSelector = createSelector(
-  registerSelector,
-  register => register.registrationResult,
-);
-
-export const registrationErrorSelector = createSelector(
-  registerSelector,
-  register => register.registrationError.errorCode,
-);
-
-export const validationsSelector = createSelector(
-  registerSelector,
-  (register) => {
-    const { registrationError, validations } = register;
-
+const getBackendValidations = createSelector(
+  [getRegistrationError, getValidations],
+  (registrationError, validations) => {
     if (validations) {
       return validations.validationDecisions;
     }
 
     if (Object.keys(registrationError).length > 0) {
-      const fields = Object.keys(registrationError).filter((fieldName) => !(fieldName in ['errorCode', 'usernameSuggestions']));
+      const fields = Object.keys(registrationError).filter(
+        (fieldName) => !(fieldName in ['errorCode', 'usernameSuggestions']),
+      );
 
       const validationDecisions = {};
       fields.forEach(field => {
@@ -34,15 +28,6 @@ export const validationsSelector = createSelector(
     }
 
     return null;
-  },
-);
+  });
 
-export const usernameSuggestionsSelector = createSelector(
-  registerSelector,
-  register => register.usernameSuggestions,
-);
-
-export const registrationFormDataSelector = createSelector(
-  registerSelector,
-  register => register.registrationFormData,
-);
+export default getBackendValidations;

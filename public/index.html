@@ -1,10 +1,16 @@
 <!doctype html>
 <html lang="en-us">
   <head>
-      <title>Authn | <%= process.env.SITE_NAME %></title>
+      <title><%= (process.env.SITE_NAME && process.env.SITE_NAME != 'null') ? 'Authentication | ' + process.env.SITE_NAME : 'Authentication' %></title>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <link rel="stylesheet" href="<%=htmlWebpackPlugin.options.MFE_STATIC_CSS_DOMAIN%>/css/mfe.css" />
+      <link rel="shortcut icon" href="<%=htmlWebpackPlugin.options.FAVICON_URL%>" type="image/x-icon"/>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/iframe-resizer/4.4.4/iframeResizer.contentWindow.min.js"
+              integrity="sha512-IWwZFBvHzN41wNI6etRLLuLrDDj/6AwJcPt7cmKJAzluYTIHHQ1PF8wh0rSy05jxEvvjflVvH2MxeV6riyEEXg=="
+              crossorigin="anonymous"
+              referrerpolicy="no-referrer">
+      </script>
       <% if (process.env.OPTIMIZELY_URL) { %>
         <script
           src="<%= process.env.OPTIMIZELY_URL %>"
@@ -13,58 +19,6 @@
         <script
           src="<%= process.env.MARKETING_SITE_BASE_URL %>/optimizelyjs/<%= process.env.OPTIMIZELY_PROJECT_ID %>.js"
         ></script>
-      <% } %>
-      <% if (process.env.ZENDESK_KEY) { %>
-        <script
-          id="ze-snippet"
-          src="https://static.zdassets.com/ekr/snippet.js?key=<%= process.env.ZENDESK_KEY %>"
-        >
-        </script>
-        <script type="text/javascript">
-          window.zESettings = {
-            cookies: true,
-            webWidget: {
-              contactOptions: {
-                enabled: false,
-              },
-              chat: {
-                suppress: false,
-              },
-              contactForm: {
-                ticketForms: [
-                  {
-                    id: 360003368814,
-                    subject: false,
-                    fields: [
-                      {
-                        id: 'description',
-                        prefill: {
-                          '*': '',
-                        },
-                      },
-                    ],
-                  },
-                ],
-                selectTicketForm: {
-                  '*': 'Please choose your request type:',
-                },
-                attachments: true,
-              },
-              helpCenter: {
-                originalArticleButton: true,
-              },
-              answerBot: {
-                suppress: false,
-                contactOnlyAfterQuery: true,
-                title: { '*': 'edX Support' },
-                avatar: {
-                  url: '<%= process.env.ZENDESK_LOGO_URL %>',
-                  name: { '*': 'edX Support' },
-                },
-              },
-            },
-          };
-        </script>
       <% } %>
   </head>
   <body>

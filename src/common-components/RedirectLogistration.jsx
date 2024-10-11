@@ -1,15 +1,25 @@
-import React from 'react';
-
 import { getConfig } from '@edx/frontend-platform';
 import PropTypes from 'prop-types';
-import { Redirect } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 
-import { WELCOME_PAGE } from '../data/constants';
+import {
+  AUTHN_PROGRESSIVE_PROFILING, RECOMMENDATIONS, REDIRECT,
+} from '../data/constants';
 import { setCookie } from '../data/utils';
 
-function RedirectLogistration(props) {
+const RedirectLogistration = (props) => {
   const {
-    finishAuthUrl, redirectUrl, redirectToWelcomePage, success, optionalFields,
+    authenticatedUser,
+    finishAuthUrl,
+    redirectUrl,
+    redirectToProgressiveProfilingPage,
+    success,
+    optionalFields,
+    redirectToRecommendationsPage,
+    educationLevel,
+    userId,
+    registrationEmbedded,
+    host,
   } = props;
   let finalRedirectUrl = '';
 
@@ -24,42 +34,80 @@ function RedirectLogistration(props) {
       finalRedirectUrl = redirectUrl;
     }
 
-    if (redirectToWelcomePage) {
+    // Redirect to Progressive Profiling after successful registration
+    if (redirectToProgressiveProfilingPage) {
+      // TODO: Do we still need this cookie?
       setCookie('van-504-returning-user', true);
-      // use this component to redirect WelcomePage after successful registration
-      // return <Redirect to={WELCOME_PAGE} />;
+
+      if (registrationEmbedded) {
+        window.parent.postMessage({
+          action: REDIRECT,
+          redirectUrl: getConfig().POST_REGISTRATION_REDIRECT_URL,
+        }, host);
+        return null;
+      }
       const registrationResult = { redirectUrl: finalRedirectUrl, success };
       return (
-        <Redirect to={{
-          pathname: WELCOME_PAGE,
-          state: {
+        <Navigate
+          to={AUTHN_PROGRESSIVE_PROFILING}
+          state={{
             registrationResult,
             optionalFields,
-          },
-        }}
+            authenticatedUser,
+          }}
+          replace
+        />
+      );
+    }
+
+    // Redirect to Recommendation page
+    if (redirectToRecommendationsPage) {
+      const registrationResult = { redirectUrl: finalRedirectUrl, success };
+      return (
+        <Navigate
+          to={RECOMMENDATIONS}
+          state={{
+            registrationResult,
+            educationLevel,
+            userId,
+          }}
+          replace
         />
       );
     }
 
     window.location.href = finalRedirectUrl;
   }
-  return <></>;
-}
+
+  return null;
+};
 
 RedirectLogistration.defaultProps = {
+  authenticatedUser: {},
+  educationLevel: null,
   finishAuthUrl: null,
   success: false,
   redirectUrl: '',
-  redirectToWelcomePage: false,
+  redirectToProgressiveProfilingPage: false,
   optionalFields: {},
+  redirectToRecommendationsPage: false,
+  userId: null,
+  registrationEmbedded: false,
+  host: '',
 };
 
 RedirectLogistration.propTypes = {
+  authenticatedUser: PropTypes.shape({}),
+  educationLevel: PropTypes.string,
   finishAuthUrl: PropTypes.string,
   success: PropTypes.bool,
   redirectUrl: PropTypes.string,
-  redirectToWelcomePage: PropTypes.bool,
+  redirectToProgressiveProfilingPage: PropTypes.bool,
   optionalFields: PropTypes.shape({}),
+  redirectToRecommendationsPage: PropTypes.bool,
+  userId: PropTypes.number,
+  registrationEmbedded: PropTypes.bool,
+  host: PropTypes.string,
 };
 
 export default RedirectLogistration;

@@ -1,6 +1,4 @@
-const { createConfig } = require('@edx/frontend-build');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
-const path = require('path');
+const { createConfig } = require('@openedx/frontend-build');
 
 const config = createConfig('webpack-prod');
 

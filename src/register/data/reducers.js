@@ -1,51 +1,59 @@
 import {
-  DEFAULT_STATE,
-  PENDING_STATE,
-} from '../../data/constants';
-import {
+  BACKUP_REGISTRATION_DATA,
   REGISTER_CLEAR_USERNAME_SUGGESTIONS,
   REGISTER_FORM_VALIDATIONS,
   REGISTER_NEW_USER,
-  REGISTER_PERSIST_FORM_DATA, REGISTER_SET_COUNTRY_CODE,
-  REGISTRATION_FORM,
+  REGISTER_SET_COUNTRY_CODE,
+  REGISTER_SET_EMAIL_SUGGESTIONS,
+  REGISTER_SET_USER_PIPELINE_DATA_LOADED,
+  REGISTRATION_CLEAR_BACKEND_ERROR,
 } from './actions';
+import {
+  DEFAULT_STATE,
+  PENDING_STATE,
+} from '../../data/constants';
+
+export const storeName = 'register';
 
 export const defaultState = {
+  backendCountryCode: '',
   registrationError: {},
   registrationResult: {},
   registrationFormData: {
-    country: '',
-    email: '',
-    name: '',
-    password: '',
-    username: '',
-    marketingOptIn: true,
-    errors: {
-      email: '',
-      name: '',
-      username: '',
-      password: '',
-      country: '',
+    configurableFormFields: {
+      marketingEmailsOptIn: true,
     },
-    emailFieldBorderClass: '',
-    emailErrorSuggestion: null,
-    emailWarningSuggestion: null,
+    formFields: {
+      name: '', email: '', username: '', password: '',
+    },
+    emailSuggestion: {
+      suggestion: '', type: '',
+    },
+    errors: {
+      name: '', email: '', username: '', password: '',
+    },
   },
   validations: null,
-  statusCode: null,
+  submitState: DEFAULT_STATE,
+  userPipelineDataLoaded: false,
   usernameSuggestions: [],
-  extendedProfile: [],
-  fieldDescriptions: {},
-  formRenderState: DEFAULT_STATE,
+  validationApiRateLimited: false,
+  shouldBackupState: false,
 };
 
-const reducer = (state = defaultState, action) => {
+const reducer = (state = defaultState, action = {}) => {
   switch (action.type) {
-    case REGISTRATION_FORM.RESET:
+    case BACKUP_REGISTRATION_DATA.BASE:
       return {
-        ...defaultState,
-        registrationFormData: state.registrationFormData,
+        ...state,
+        shouldBackupState: true,
+      };
+    case BACKUP_REGISTRATION_DATA.BEGIN:
+      return {
+        ...state,
         usernameSuggestions: state.usernameSuggestions,
+        registrationFormData: { ...action.payload },
+        userPipelineDataLoaded: state.userPipelineDataLoaded,
       };
     case REGISTER_NEW_USER.BEGIN:
       return {
@@ -69,22 +77,26 @@ const reducer = (state = defaultState, action) => {
         usernameSuggestions: usernameSuggestions || state.usernameSuggestions,
       };
     }
-    case REGISTER_FORM_VALIDATIONS.BEGIN:
+    case REGISTRATION_CLEAR_BACKEND_ERROR: {
+      const registrationErrorTemp = state.registrationError;
+      delete registrationErrorTemp[action.payload];
       return {
         ...state,
+        registrationError: { ...registrationErrorTemp },
       };
+    }
     case REGISTER_FORM_VALIDATIONS.SUCCESS: {
-      const { usernameSuggestions } = action.payload.validations;
+      const { usernameSuggestions, ...validationWithoutUsernameSuggestions } = action.payload.validations;
       return {
         ...state,
-        validations: action.payload.validations,
+        validations: validationWithoutUsernameSuggestions,
         usernameSuggestions: usernameSuggestions || state.usernameSuggestions,
       };
     }
     case REGISTER_FORM_VALIDATIONS.FAILURE:
       return {
         ...state,
-        statusCode: 403,
+        validationApiRateLimited: true,
         validations: null,
       };
     case REGISTER_CLEAR_USERNAME_SUGGESTIONS:
@@ -92,33 +104,36 @@ const reducer = (state = defaultState, action) => {
         ...state,
         usernameSuggestions: [],
       };
-    case REGISTER_PERSIST_FORM_DATA: {
-      const { formData, clearRegistrationError } = action.payload;
-      return {
-        ...state,
-        registrationError: clearRegistrationError ? {} : state.registrationError,
-        registrationFormData: {
-          ...state.registrationFormData,
-          ...formData,
-        },
-      };
-    }
     case REGISTER_SET_COUNTRY_CODE: {
       const { countryCode } = action.payload;
-      if (state.registrationFormData.country === '') {
+      if (!state.registrationFormData.configurableFormFields.country) {
         return {
           ...state,
-          registrationFormData: {
-            ...state.registrationFormData,
-            country: countryCode,
-            errors: { ...state.registrationFormData.errors, country: '' },
-          },
+          backendCountryCode: countryCode,
         };
       }
       return state;
     }
+    case REGISTER_SET_USER_PIPELINE_DATA_LOADED: {
+      const { value } = action.payload;
+      return {
+        ...state,
+        userPipelineDataLoaded: value,
+      };
+    }
+    case REGISTER_SET_EMAIL_SUGGESTIONS:
+      return {
+        ...state,
+        registrationFormData: {
+          ...state.registrationFormData,
+          emailSuggestion: action.payload.emailSuggestion,
+        },
+      };
     default:
-      return state;
+      return {
+        ...state,
+        shouldBackupState: false,
+      };
   }
 };
 

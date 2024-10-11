@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 import {
   Form, TransitionReplace,
-} from '@edx/paragon';
+} from '@openedx/paragon';
 import PropTypes from 'prop-types';
 
 const FormGroup = (props) => {
@@ -27,7 +27,7 @@ const FormGroup = (props) => {
         readOnly={props.readOnly}
         type={props.type}
         aria-invalid={props.errorMessage !== ''}
-        className="form-field"
+        className="form-group__form-field"
         autoComplete={props.autoComplete}
         spellCheck={props.spellCheck}
         name={props.name}
@@ -37,7 +37,6 @@ const FormGroup = (props) => {
         onClick={handleClick}
         onChange={props.handleChange}
         controlClassName={props.borderClass}
-
         trailingElement={props.trailingElement}
         floatingLabel={props.floatingLabel}
       >

@@ -1,1063 +1,420 @@
-import React from 'react';
-import { connect } from 'react-redux';
+import React, {
+  useEffect, useMemo, useState,
+} from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 
-import { getConfig, snakeCaseObject } from '@edx/frontend-platform';
+import { getConfig } from '@edx/frontend-platform';
 import { sendPageEvent, sendTrackEvent } from '@edx/frontend-platform/analytics';
-import {
-  getCountryList, getLocale, injectIntl, intlShape,
-} from '@edx/frontend-platform/i18n';
-import {
-  Alert, Form, Icon, StatefulButton,
-} from '@edx/paragon';
-import { Close, Error } from '@edx/paragon/icons';
-import PropTypes, { string } from 'prop-types';
+import { useIntl } from '@edx/frontend-platform/i18n';
+import { Form, Spinner, StatefulButton } from '@openedx/paragon';
+import classNames from 'classnames';
+import PropTypes from 'prop-types';
 import { Helmet } from 'react-helmet';
 import Skeleton from 'react-loading-skeleton';
 
+import ConfigurableRegistrationForm from './components/ConfigurableRegistrationForm';
+import RegistrationFailure from './components/RegistrationFailure';
 import {
-  FormGroup, InstitutionLogistration, PasswordField, RedirectLogistration,
-  RenderInstitutionButton, SocialAuthProviders, ThirdPartyAuthAlert,
-} from '../common-components';
-import { getThirdPartyAuthContext } from '../common-components/data/actions';
-import {
-  extendedProfileSelector,
-  fieldDescriptionSelector,
-  optionalFieldsSelector,
-  thirdPartyAuthContextSelector,
-} from '../common-components/data/selectors';
-import EnterpriseSSO from '../common-components/EnterpriseSSO';
-import {
-  DEFAULT_STATE, LETTER_REGEX, NUMBER_REGEX, PENDING_STATE, REGISTER_PAGE, VALID_EMAIL_REGEX, VALID_NAME_REGEX,
-} from '../data/constants';
-import {
-  getAllPossibleQueryParam, getTpaHint, getTpaProvider, setCookie, setSurveyCookie,
-} from '../data/utils';
-import FormFieldRenderer from '../field-renderer';
-import CountryDropdown from './CountryDropdown';
-import {
-  clearUsernameSuggestions,
-  fetchRealtimeValidations,
+  backupRegistrationFormBegin,
+  clearRegistrationBackendError,
   registerNewUser,
-  resetRegistrationForm,
-  setRegistrationFormData,
+  setEmailSuggestionInStore,
+  setUserPipelineDataLoaded,
 } from './data/actions';
 import {
-  COMMON_EMAIL_PROVIDERS, COUNTRY_CODE_KEY, COUNTRY_DISPLAY_KEY, DEFAULT_SERVICE_PROVIDER_DOMAINS,
-  DEFAULT_TOP_LEVEL_DOMAINS, FIELDS, FORM_SUBMISSION_ERROR,
+  FORM_SUBMISSION_ERROR,
+  TPA_AUTHENTICATION_FAILURE,
 } from './data/constants';
+import getBackendValidations from './data/selectors';
 import {
-  registrationErrorSelector,
-  registrationFormDataSelector,
-  registrationRequestSelector,
-  usernameSuggestionsSelector,
-  validationsSelector,
-} from './data/selectors';
-import HonorCode from './HonorCode';
+  isFormValid, prepareRegistrationPayload,
+} from './data/utils';
 import messages from './messages';
-import RegistrationFailure from './RegistrationFailure';
-import TermsOfService from './TermsOfService';
-import UsernameField from './UsernameField';
-import { getLevenshteinSuggestion, getSuggestionForInvalidEmail } from './utils';
+import { EmailField, NameField, UsernameField } from './RegistrationFields';
+import {
+  InstitutionLogistration,
+  PasswordField,
+  RedirectLogistration,
+  ThirdPartyAuthAlert,
+} from '../common-components';
+import { getThirdPartyAuthContext as getRegistrationDataFromBackend } from '../common-components/data/actions';
+import EnterpriseSSO from '../common-components/EnterpriseSSO';
+import ThirdPartyAuth from '../common-components/ThirdPartyAuth';
+import {
+  COMPLETE_STATE, PENDING_STATE, REGISTER_PAGE,
+} from '../data/constants';
+import {
+  getAllPossibleQueryParams, getTpaHint, getTpaProvider, isHostAvailableInQueryParams, setCookie,
+} from '../data/utils';
 
-class RegistrationPage extends React.Component {
-  constructor(props, context) {
-    super(props, context);
-    this.handleOnClose = this.handleOnClose.bind(this);
-    this.countryList = getCountryList(getLocale());
-    this.queryParams = getAllPossibleQueryParam();
-    // TODO: Once we have tested it and ready for openedX we can remove this flag and make the code
-    // permanent part of Authn and remove extra code
-    this.showDynamicRegistrationFields = getConfig().ENABLE_DYNAMIC_REGISTRATION_FIELDS;
-    this.tpaHint = getTpaHint();
-    const { registrationFormData } = this.props;
-    this.state = {
-      country: '',
-      email: registrationFormData.email,
-      name: registrationFormData.name,
-      password: registrationFormData.password,
-      username: registrationFormData.username,
-      marketingOptIn: registrationFormData.marketingOptIn,
-      errors: {
-        email: registrationFormData.errors.email,
-        name: registrationFormData.errors.name,
-        username: registrationFormData.errors.username,
-        password: registrationFormData.errors.password,
-        country: '',
-      },
-      emailFieldBorderClass: registrationFormData.emailFieldBorderClass,
-      emailErrorSuggestion: registrationFormData.emailErrorSuggestion,
-      emailWarningSuggestion: registrationFormData.emailWarningSuggestion,
-      errorCode: null,
-      failureCount: 0,
-      startTime: Date.now(),
-      totalRegistrationTime: 0,
-      validatePassword: false,
-      values: {},
-      focusedField: '',
-    };
-  }
+/**
+ * Main Registration Page component
+ */
+const RegistrationPage = (props) => {
+  const { formatMessage } = useIntl();
+  const dispatch = useDispatch();
 
-  componentDidMount() {
-    sendPageEvent('login_and_registration', 'register');
-    const payload = { ...this.queryParams };
-    window.optimizely = window.optimizely || [];
-    window.optimizely.push({
-      type: 'page',
-      pageName: 'authn_registration_page',
-      isActive: true,
-    });
+  const registrationEmbedded = isHostAvailableInQueryParams();
+  const platformName = getConfig().SITE_NAME;
+  const flags = {
+    showConfigurableEdxFields: getConfig().SHOW_CONFIGURABLE_EDX_FIELDS,
+    showConfigurableRegistrationFields: getConfig().ENABLE_DYNAMIC_REGISTRATION_FIELDS,
+    showMarketingEmailOptInCheckbox: getConfig().MARKETING_EMAILS_OPT_IN,
+    autoGeneratedUsernameEnabled: getConfig().ENABLE_AUTO_GENERATED_USERNAME,
+  };
+  const {
+    handleInstitutionLogin,
+    institutionLogin,
+  } = props;
 
-    if (payload.save_for_later === 'true') {
-      sendTrackEvent('edx.bi.user.saveforlater.course.enroll.clicked', { category: 'save-for-later' });
+  const backedUpFormData = useSelector(state => state.register.registrationFormData);
+  const registrationError = useSelector(state => state.register.registrationError);
+  const registrationErrorCode = registrationError?.errorCode;
+  const registrationResult = useSelector(state => state.register.registrationResult);
+  const shouldBackupState = useSelector(state => state.register.shouldBackupState);
+  const userPipelineDataLoaded = useSelector(state => state.register.userPipelineDataLoaded);
+  const submitState = useSelector(state => state.register.submitState);
+
+  const fieldDescriptions = useSelector(state => state.commonComponents.fieldDescriptions);
+  const optionalFields = useSelector(state => state.commonComponents.optionalFields);
+  const thirdPartyAuthApiStatus = useSelector(state => state.commonComponents.thirdPartyAuthApiStatus);
+  const autoSubmitRegForm = useSelector(state => state.commonComponents.thirdPartyAuthContext.autoSubmitRegForm);
+  const thirdPartyAuthErrorMessage = useSelector(state => state.commonComponents.thirdPartyAuthContext.errorMessage);
+  const finishAuthUrl = useSelector(state => state.commonComponents.thirdPartyAuthContext.finishAuthUrl);
+  const currentProvider = useSelector(state => state.commonComponents.thirdPartyAuthContext.currentProvider);
+  const providers = useSelector(state => state.commonComponents.thirdPartyAuthContext.providers);
+  const secondaryProviders = useSelector(state => state.commonComponents.thirdPartyAuthContext.secondaryProviders);
+  const pipelineUserDetails = useSelector(state => state.commonComponents.thirdPartyAuthContext.pipelineUserDetails);
+
+  const backendValidations = useSelector(getBackendValidations);
+  const queryParams = useMemo(() => getAllPossibleQueryParams(), []);
+  const tpaHint = useMemo(() => getTpaHint(), []);
+
+  const [formFields, setFormFields] = useState({ ...backedUpFormData.formFields });
+  const [configurableFormFields, setConfigurableFormFields] = useState({ ...backedUpFormData.configurableFormFields });
+  const [errors, setErrors] = useState({ ...backedUpFormData.errors });
+  const [errorCode, setErrorCode] = useState({ type: '', count: 0 });
+  const [formStartTime, setFormStartTime] = useState(null);
+  // temporary error state for embedded experience because we don't want to show errors on blur
+  const [temporaryErrors, setTemporaryErrors] = useState({ ...backedUpFormData.errors });
+
+  const { cta, host } = queryParams;
+  const buttonLabel = cta
+    ? formatMessage(messages['create.account.cta.button'], { label: cta })
+    : formatMessage(messages['create.account.for.free.button']);
+
+  /**
+   * Set the userPipelineDetails data in formFields for only first time
+   */
+  useEffect(() => {
+    if (!userPipelineDataLoaded && thirdPartyAuthApiStatus === COMPLETE_STATE) {
+      if (thirdPartyAuthErrorMessage) {
+        setErrorCode(prevState => ({ type: TPA_AUTHENTICATION_FAILURE, count: prevState.count + 1 }));
+      }
+      if (pipelineUserDetails && Object.keys(pipelineUserDetails).length !== 0) {
+        const { name = '', username = '', email = '' } = pipelineUserDetails;
+        setFormFields(prevState => ({
+          ...prevState, name, username, email,
+        }));
+        dispatch(setUserPipelineDataLoaded(true));
+      }
     }
+  }, [ // eslint-disable-line react-hooks/exhaustive-deps
+    thirdPartyAuthApiStatus,
+    thirdPartyAuthErrorMessage,
+    pipelineUserDetails,
+    userPipelineDataLoaded,
+  ]);
 
-    if (this.tpaHint) {
-      payload.tpa_hint = this.tpaHint;
+  useEffect(() => {
+    if (!formStartTime) {
+      sendPageEvent('login_and_registration', 'register');
+      const payload = { ...queryParams, is_register_page: true };
+      if (tpaHint) {
+        payload.tpa_hint = tpaHint;
+      }
+      dispatch(getRegistrationDataFromBackend(payload));
+      setFormStartTime(Date.now());
     }
-    payload.is_register_page = true;
-    this.props.resetRegistrationForm();
-    this.props.getThirdPartyAuthContext(payload);
-  }
+  }, [dispatch, formStartTime, queryParams, tpaHint]);
 
-  shouldComponentUpdate(nextProps) {
-    if (nextProps.registrationFormData && this.props.registrationFormData !== nextProps.registrationFormData) {
-      // Ensuring browser's autofill user credentials get filled and their state persists in the redux store.
-      const nextState = {
-        username: nextProps.registrationFormData.username || this.state.username,
-        password: nextProps.registrationFormData.password || this.state.password,
-      };
-      // Do not set focused field's value from redux store to retain entered data in focused field.
-      let { focusedField } = this.state;
+  /**
+   * Backup the registration form in redux when register page is toggled.
+   */
+  useEffect(() => {
+    if (shouldBackupState) {
+      dispatch(backupRegistrationFormBegin({
+        ...backedUpFormData,
+        configurableFormFields: { ...configurableFormFields },
+        formFields: { ...formFields },
+        errors: { ...errors },
+      }));
+    }
+  }, [shouldBackupState, configurableFormFields, formFields, errors, dispatch, backedUpFormData]);
 
-      // Exemption for country field's value as we need to set updated value from the store.
-      if (focusedField === 'country') { focusedField = ''; }
-
-      // For username field's value as we need to wait for usernameSuggestions.
-      // Otherwise, an infinite state update loop error appears.
-      if (focusedField === 'username') {
-        this.setState({
-          ...nextProps.registrationFormData,
-          ...nextState,
-        });
+  useEffect(() => {
+    if (backendValidations) {
+      if (registrationEmbedded) {
+        setTemporaryErrors(prevErrors => ({ ...prevErrors, ...backendValidations }));
       } else {
-        const { [focusedField]: _, ...registrationData } = { ...nextProps.registrationFormData, ...nextState };
-        this.setState({
-          ...registrationData,
-        });
+        setErrors(prevErrors => ({ ...prevErrors, ...backendValidations }));
       }
     }
+  }, [backendValidations, registrationEmbedded]);
 
-    if (this.props.usernameSuggestions.length > 0 && this.state.username === '') {
-      this.props.setRegistrationFormData({
-        username: ' ',
-      });
-      return false;
+  useEffect(() => {
+    if (registrationErrorCode) {
+      setErrorCode(prevState => ({ type: registrationErrorCode, count: prevState.count + 1 }));
     }
+  }, [registrationErrorCode]);
 
-    if (this.props.validationDecisions !== nextProps.validationDecisions) {
-      if (nextProps.validationDecisions) {
-        const state = {};
-        const errors = { ...this.state.errors, ...nextProps.validationDecisions };
-        let validatePassword = false;
+  useEffect(() => {
+    if (registrationResult.success) {
+      // This event is used by GTM
+      sendTrackEvent('edx.bi.user.account.registered.client', {});
 
-        if (errors.password) {
-          validatePassword = true;
-        }
-
-        if (nextProps.registrationErrorCode) {
-          state.errorCode = nextProps.registrationErrorCode;
-        }
-
-        let {
-          suggestedTldMessage,
-          suggestedTopLevelDomain,
-          suggestedSldMessage,
-          suggestedServiceLevelDomain,
-        } = this.state;
-
-        if (errors.email) {
-          suggestedTldMessage = '';
-          suggestedTopLevelDomain = '';
-          suggestedSldMessage = '';
-          suggestedServiceLevelDomain = '';
-        }
-
-        this.setState({
-          ...state,
-          suggestedTldMessage,
-          suggestedTopLevelDomain,
-          suggestedSldMessage,
-          suggestedServiceLevelDomain,
-          validatePassword,
-        });
-
-        this.props.setRegistrationFormData({
-          errors,
-        }, true);
-      }
-      return false;
+      // This is used by the "User Retention Rate Event" on GTM
+      setCookie(getConfig().USER_RETENTION_COOKIE_NAME, true);
     }
+  }, [registrationResult]);
 
-    if (this.props.thirdPartyAuthContext.pipelineUserDetails !== nextProps.thirdPartyAuthContext.pipelineUserDetails) {
-      const { pipelineUserDetails } = nextProps.thirdPartyAuthContext;
-      const { registrationFormData } = this.props;
-
-      // Added a conditional errors check to not fall back on pipelines data when a user explicitly edits the form.
-      this.props.setRegistrationFormData({
-        name: registrationFormData.errors.name ? registrationFormData.name
-          : (registrationFormData.name || pipelineUserDetails.name || ''),
-        email: registrationFormData.errors.email ? registrationFormData.email
-          : (registrationFormData.email || pipelineUserDetails.email || ''),
-        username: registrationFormData.errors.username ? registrationFormData.username
-          : (registrationFormData.username || pipelineUserDetails.username || ''),
-        country: registrationFormData.country || nextProps.thirdPartyAuthContext.countryCode,
-      });
-      return false;
+  const handleOnChange = (event) => {
+    const { name } = event.target;
+    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+    if (registrationError[name]) {
+      dispatch(clearRegistrationBackendError(name));
     }
-
-    if (this.props.thirdPartyAuthContext.countryCode !== nextProps.thirdPartyAuthContext.countryCode) {
-      this.props.setRegistrationFormData({
-        country: this.props.registrationFormData.country || nextProps.thirdPartyAuthContext.countryCode,
-      });
-      return false;
-    }
-
-    return true;
-  }
-
-  onChangeHandler = (e) => {
-    const { name, value, checked } = e.target;
-    const { errors, values } = this.state;
-    if (e.target.type === 'checkbox') {
-      errors[name] = '';
-      values[name] = checked;
-    } else {
-      values[name] = value;
-    }
-    const state = { errors, values };
-    this.setState({ ...state });
+    setErrors(prevErrors => ({ ...prevErrors, [name]: '' }));
+    setFormFields(prevState => ({ ...prevState, [name]: value }));
   };
 
-  handleSubmit = (e) => {
-    e.preventDefault();
-
-    const { startTime } = this.state;
-    const totalRegistrationTime = (Date.now() - startTime) / 1000;
-    const dynamicFieldErrorMessages = {};
-
-    let payload = {
-      name: this.state.name,
-      username: this.state.username,
-      email: this.state.email,
-      is_authn_mfe: true,
-    };
-
-    if (this.props.thirdPartyAuthContext.currentProvider) {
-      payload.social_auth_provider = this.props.thirdPartyAuthContext.currentProvider;
-    } else {
-      payload.password = this.state.password;
-    }
-
-    if (this.showDynamicRegistrationFields) {
-      payload.extendedProfile = [];
-      Object.keys(this.props.fieldDescriptions).forEach((fieldName) => {
-        if (this.props.extendedProfile.includes(fieldName)) {
-          payload.extendedProfile.push({ fieldName, fieldValue: this.state.values[fieldName] });
-        } else {
-          payload[fieldName] = this.state.values[fieldName];
-        }
-        dynamicFieldErrorMessages[fieldName] = this.props.fieldDescriptions[fieldName].error_message;
-      });
-      if (
-        this.props.fieldDescriptions[FIELDS.HONOR_CODE]
-        && this.props.fieldDescriptions[FIELDS.HONOR_CODE].type === 'tos_and_honor_code'
-      ) {
-        payload[FIELDS.HONOR_CODE] = true;
+  const handleErrorChange = (fieldName, error) => {
+    if (registrationEmbedded) {
+      setTemporaryErrors(prevErrors => ({
+        ...prevErrors,
+        [fieldName]: error,
+      }));
+      if (error === '' && errors[fieldName] !== '') {
+        setErrors(prevErrors => ({
+          ...prevErrors,
+          [fieldName]: error,
+        }));
       }
     } else {
-      payload.country = this.state.country;
-      payload.honor_code = true;
+      setErrors(prevErrors => ({
+        ...prevErrors,
+        [fieldName]: error,
+      }));
+    }
+  };
+
+  const registerUser = () => {
+    const totalRegistrationTime = (Date.now() - formStartTime) / 1000;
+    let payload = { ...formFields };
+
+    if (currentProvider) {
+      delete payload.password;
+      payload.social_auth_provider = currentProvider;
+    }
+    if (flags.autoGeneratedUsernameEnabled) {
+      delete payload.username;
     }
 
-    if (!this.isFormValid(payload, dynamicFieldErrorMessages)) {
-      this.setState(prevState => ({
-        errorCode: FORM_SUBMISSION_ERROR,
-        failureCount: prevState.failureCount + 1,
-      }));
+    // Validating form data before submitting
+    const { isValid, fieldErrors, emailSuggestion } = isFormValid(
+      payload,
+      registrationEmbedded ? temporaryErrors : errors,
+      configurableFormFields,
+      fieldDescriptions,
+      formatMessage,
+    );
+    setErrors({ ...fieldErrors });
+    dispatch(setEmailSuggestionInStore(emailSuggestion));
+
+    // returning if not valid
+    if (!isValid) {
+      setErrorCode(prevState => ({ type: FORM_SUBMISSION_ERROR, count: prevState.count + 1 }));
       return;
     }
 
-    if (getConfig().MARKETING_EMAILS_OPT_IN) {
-      payload.marketing_emails_opt_in = this.state.marketingOptIn;
-    }
-
-    payload = snakeCaseObject(payload);
-    payload.totalRegistrationTime = totalRegistrationTime;
-
-    // add query params to the payload
-    payload = { ...payload, ...this.queryParams };
-    this.setState({
+    // Preparing payload for submission
+    payload = prepareRegistrationPayload(
+      payload,
+      configurableFormFields,
+      flags.showMarketingEmailOptInCheckbox,
       totalRegistrationTime,
-    }, () => {
-      this.props.registerNewUser(payload);
-    });
-  }
+      queryParams);
 
-  handleOnBlur = (e) => {
-    let { name, value } = e.target;
-    this.setState({
-      focusedField: '',
-    });
+    // making register call
+    dispatch(registerNewUser(payload));
+  };
 
-    if (name === 'passwordValidation') {
-      name = 'password';
-      value = this.state.password;
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    registerUser();
+  };
+
+  useEffect(() => {
+    if (autoSubmitRegForm && userPipelineDataLoaded) {
+      registerUser();
     }
-    const payload = {
-      is_authn_mfe: true,
-      form_field_key: name,
-      email: this.state.email,
-      username: this.state.username,
-      password: this.state.password,
-      name: this.state.name,
-      honor_code: true,
-      country: this.state.country,
-    };
-    this.validateInput(name, value, payload);
-  }
+  }, [autoSubmitRegForm, userPipelineDataLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  handleOnChange = (e) => {
-    let { value } = e.target;
-    if (e.target.name === 'username') {
-      if (value.length > 30) {
-        return;
-      }
-      if (value.startsWith(' ')) {
-        value = value.substring(1);
-      }
-    }
-
-    this.setState({
-      [e.target.name]: value,
-    });
-  }
-
-  handleOnFocus = (e) => {
-    const fieldName = e.target.name;
-    this.setState({
-      focusedField: fieldName,
-    });
-    const { errors } = this.state;
-    errors[fieldName] = '';
-    if (fieldName === 'username') {
-      this.props.clearUsernameSuggestions();
-    }
-    if (fieldName === 'countryExpand') {
-      errors.country = '';
-    }
-    if (fieldName === 'passwordValidation') {
-      errors.password = '';
-    }
-
-    this.props.setRegistrationFormData({
-      errors,
-    });
-  }
-
-  handleSuggestionClick = (e, suggestion) => {
-    const { errors } = this.state;
-    if (e.target.name === 'username') {
-      errors.username = '';
-      this.props.setRegistrationFormData({
-        username: suggestion,
-        errors,
-      });
-      this.props.clearUsernameSuggestions();
-    } else if (e.target.name === 'email') {
-      e.preventDefault();
-      errors.email = '';
-      this.props.setRegistrationFormData({
-        email: suggestion,
-        emailErrorSuggestion: null,
-        emailWarningSuggestion: null,
-        emailFieldBorderClass: '',
-        errors,
-      });
-    }
-  }
-
-  handleUsernameSuggestionClose = () => {
-    this.props.setRegistrationFormData({
-      username: '',
-    });
-    this.props.clearUsernameSuggestions();
-  }
-
-  validateDynamicFields = (e) => {
-    const { intl } = this.props;
-    const { errors } = this.state;
-    const { name, value } = e.target;
-    if (!value.trim()) {
-      errors[name] = this.props.fieldDescriptions[name].error_message;
-    }
-    if (name === 'confirm_email' && value.length > 0 && this.state.email && value !== this.state.email) {
-      errors.confirm_email = intl.formatMessage(messages['email.do.not.match']);
-    }
-    this.setState({ errors });
-  }
-
-  isFormValid(payload, dynamicFieldError) {
-    const { errors } = this.state;
-    let isValid = true;
-    Object.keys(payload).forEach(key => {
-      if (!payload[key]) {
-        errors[key] = (key in dynamicFieldError) ? dynamicFieldError[key] : this.props.intl.formatMessage(messages[`empty.${key}.field.error`]);
-      }
-      // Mark form invalid, if there was already a validation error for this key or we added empty field error
-      if (errors[key]) {
-        isValid = false;
-      }
-    });
-
-    const state = { ...payload, errors };
-    this.props.setRegistrationFormData({
-      ...state,
-    });
-    return isValid;
-  }
-
-  validateInput(fieldName, value, payload) {
-    let state = {};
-    const { errors } = this.state;
-    const { intl, statusCode } = this.props;
-    const emailRegex = new RegExp(VALID_EMAIL_REGEX, 'i');
-    const urlRegex = new RegExp(VALID_NAME_REGEX);
-
-    switch (fieldName) {
-      case 'email':
-        if (!value) {
-          errors.email = intl.formatMessage(messages['empty.email.field.error']);
-        } else if (value.length <= 2) {
-          errors.email = intl.formatMessage(messages['email.invalid.format.error']);
-        } else {
-          let emailWarningSuggestion = null;
-          let emailErrorSuggestion = null;
-
-          const [username, domainName] = value.split('@');
-
-          // Check if email address is invalid. If we have a suggestion for invalid email provide that along with
-          // error message.
-          if (!emailRegex.test(value)) {
-            errors.email = intl.formatMessage(messages['email.invalid.format.error']);
-            emailErrorSuggestion = getSuggestionForInvalidEmail(domainName, username);
-          } else {
-            let suggestion = null;
-            const hasMultipleSubdomains = value.match(/\./g).length > 1;
-            const [serviceLevelDomain, topLevelDomain] = domainName.split('.');
-            const tldSuggestion = !DEFAULT_TOP_LEVEL_DOMAINS.includes(topLevelDomain);
-            const serviceSuggestion = getLevenshteinSuggestion(serviceLevelDomain, DEFAULT_SERVICE_PROVIDER_DOMAINS, 2);
-
-            if (DEFAULT_SERVICE_PROVIDER_DOMAINS.includes(serviceSuggestion || serviceLevelDomain)) {
-              suggestion = `${username}@${serviceSuggestion || serviceLevelDomain}.com`;
-            }
-
-            if (!hasMultipleSubdomains && tldSuggestion) {
-              emailErrorSuggestion = suggestion;
-            } else if (serviceSuggestion) {
-              emailWarningSuggestion = suggestion;
-            } else {
-              suggestion = getLevenshteinSuggestion(domainName, COMMON_EMAIL_PROVIDERS, 3);
-              if (suggestion) {
-                emailWarningSuggestion = `${username}@${suggestion}`;
-              }
-            }
-
-            if (!hasMultipleSubdomains && tldSuggestion) {
-              errors.email = intl.formatMessage(messages['email.invalid.format.error']);
-            } else if (payload && statusCode !== 403) {
-              this.props.fetchRealtimeValidations(payload);
-            } else {
-              errors.email = '';
-            }
-            if (this.state.values && this.state.values.confirm_email && value !== this.state.values.confirm_email) {
-              errors.confirm_email = intl.formatMessage(messages['email.do.not.match']);
-            }
-          }
-          state = {
-            emailWarningSuggestion,
-            emailErrorSuggestion,
-            emailFieldBorderClass: emailWarningSuggestion ? 'yellow-border' : null,
-          };
-        }
-        break;
-      case 'name':
-        if (!value.trim()) {
-          errors.name = intl.formatMessage(messages['empty.name.field.error']);
-        } else if (value && value.match(urlRegex)) {
-          errors.name = intl.formatMessage(messages['name.validation.message']);
-        } else {
-          errors.name = '';
-        }
-
-        if (!this.state.username.trim() && value) {
-          // fetch username suggestions based on the full name
-          this.props.fetchRealtimeValidations(payload);
-        }
-        break;
-      case 'username':
-        if (value === ' ' && this.props.usernameSuggestions.length > 0) {
-          errors.username = '';
-          break;
-        }
-        if (!value || value.length <= 1 || value.length > 30) {
-          errors.username = intl.formatMessage(messages['username.validation.message']);
-        } else if (!value.match(/^[a-zA-Z0-9_-]*$/i)) {
-          errors.username = intl.formatMessage(messages['username.format.validation.message']);
-        } else if (payload && statusCode !== 403) {
-          this.props.fetchRealtimeValidations(payload);
-        } else {
-          errors.username = '';
-        }
-
-        if (this.state.validatePassword) {
-          this.props.fetchRealtimeValidations({ ...payload, form_field_key: 'password' });
-        }
-        break;
-      case 'password':
-        errors.password = '';
-        if (!value || !LETTER_REGEX.test(value) || !NUMBER_REGEX.test(value) || value.length < 8) {
-          errors.password = intl.formatMessage(messages['password.validation.message']);
-        } else if (payload && statusCode !== 403) {
-          this.props.fetchRealtimeValidations(payload);
-        }
-        break;
-      case 'country':
-        value = value.trim(); // eslint-disable-line no-param-reassign
-        if (value) {
-          const normalizedValue = value.toLowerCase();
-          let selectedCountry = (
-            this.countryList.find((o) => o[COUNTRY_DISPLAY_KEY].toLowerCase().trim() === normalizedValue));
-          if (selectedCountry) {
-            value = selectedCountry[COUNTRY_CODE_KEY]; // eslint-disable-line no-param-reassign
-            errors.country = '';
-            break;
-          } else {
-            // Handling a case here where user enters a valid country code that needs to be
-            // evaluated and set its value as a valid value.
-            selectedCountry = (
-              this.countryList.find((o) => o[COUNTRY_CODE_KEY].toLowerCase().trim() === normalizedValue));
-            if (selectedCountry) {
-              value = selectedCountry[COUNTRY_CODE_KEY]; // eslint-disable-line no-param-reassign
-              errors.country = '';
-              break;
-            }
-          }
-        }
-        errors.country = intl.formatMessage(messages['empty.country.field.error']);
-        break;
-      default:
-        break;
-    }
-
-    state = {
-      ...state,
-      [fieldName]: value,
-    };
-    this.props.setRegistrationFormData({
-      ...state,
-      errors,
-    });
-
-    return errors;
-  }
-
-  handleOnClose() {
-    this.props.setRegistrationFormData({
-      emailErrorSuggestion: null,
-    });
-  }
-
-  renderEmailFeedback() {
-    if (this.state.emailErrorSuggestion) {
-      return (
-        <Alert variant="danger" className="email-error-alert" icon={Error}>
-          <span className="alert-text">
-            {this.props.intl.formatMessage(messages['did.you.mean.alert.text'])}{' '}
-            <Alert.Link
-              href="#"
-              name="email"
-              onClick={e => { this.handleSuggestionClick(e, this.state.emailErrorSuggestion); }}
-            >
-              {this.state.emailErrorSuggestion}
-            </Alert.Link>?<Icon src={Close} className="alert-close" onClick={this.handleOnClose} tabIndex="0" />
-          </span>
-        </Alert>
-      );
-    }
-    if (this.state.emailWarningSuggestion) {
-      return (
-        <span className="small">
-          {this.props.intl.formatMessage(messages['did.you.mean.alert.text'])}:{' '}
-          <Alert.Link
-            href="#"
-            name="email"
-            className="email-warning-alert-link"
-            onClick={e => { this.handleSuggestionClick(e, this.state.emailWarningSuggestion); }}
-          >
-            {this.state.emailWarningSuggestion}
-          </Alert.Link>?
-        </span>
-      );
-    }
-
-    return null;
-  }
-
-  renderThirdPartyAuth(providers, secondaryProviders, currentProvider, thirdPartyAuthApiStatus, intl) {
-    const isInstitutionAuthActive = !!secondaryProviders.length && !currentProvider;
-    const isSocialAuthActive = !!providers.length && !currentProvider;
-    const isEnterpriseLoginDisabled = getConfig().DISABLE_ENTERPRISE_LOGIN;
-
-    return (
-      <>
-        {((isEnterpriseLoginDisabled && isInstitutionAuthActive) || isSocialAuthActive) && (
-          <div className="mt-4 mb-3 h4">
-            {intl.formatMessage(messages['registration.other.options.heading'])}
-          </div>
-        )}
-
-        {thirdPartyAuthApiStatus === PENDING_STATE ? (
-          <Skeleton className="tpa-skeleton" height={36} count={2} />
-        ) : (
-          <>
-            {(isEnterpriseLoginDisabled && isInstitutionAuthActive) && (
-              <RenderInstitutionButton
-                onSubmitHandler={this.props.handleInstitutionLogin}
-                buttonTitle={intl.formatMessage(messages['register.institution.login.button'])}
-              />
-            )}
-            {isSocialAuthActive && (
-              <div className="row m-0">
-                <SocialAuthProviders socialAuthProviders={providers} referrer={REGISTER_PAGE} />
-              </div>
-            )}
-          </>
-        )}
-      </>
-    );
-  }
-
-  renderForm(currentProvider,
-    providers,
-    secondaryProviders,
-    thirdPartyAuthApiStatus,
-    finishAuthUrl,
-    submitState,
-    intl) {
-    if (this.props.institutionLogin) {
+  const renderForm = () => {
+    if (institutionLogin) {
       return (
         <InstitutionLogistration
-          secondaryProviders={this.props.thirdPartyAuthContext.secondaryProviders}
-          headingTitle={intl.formatMessage(messages['register.institution.login.page.title'])}
+          secondaryProviders={secondaryProviders}
+          headingTitle={formatMessage(messages['register.institution.login.page.title'])}
         />
       );
     }
-
-    if (this.props.registrationResult.success) {
-      setSurveyCookie('register');
-      setCookie(getConfig().REGISTER_CONVERSION_COOKIE_NAME, true);
-      setCookie('authn-returning-user');
-
-      // Fire optimizely events
-      window.optimizely = window.optimizely || [];
-      window.optimizely.push({
-        type: 'event',
-        eventName: 'authn-register-conversion',
-        tags: {
-          value: this.state.totalRegistrationTime,
-        },
-      });
-    }
-
-    const honorCode = [];
-    const formFields = this.showDynamicRegistrationFields ? (
-      Object.keys(this.props.fieldDescriptions).map((fieldName) => {
-        const fieldData = this.props.fieldDescriptions[fieldName];
-        switch (fieldData.name) {
-          case FIELDS.COUNTRY:
-            return (
-              <span key={fieldData.name}>
-                <CountryDropdown
-                  name="country"
-                  floatingLabel={intl.formatMessage(messages['registration.country.label'])}
-                  options={this.countryList}
-                  value={this.state.values[fieldData.name]}
-                  handleBlur={this.handleOnBlur}
-                  handleFocus={this.handleOnFocus}
-                  errorMessage={intl.formatMessage(messages['empty.country.field.error'])}
-                  handleChange={
-                    (value) => this.setState(prevState => ({ values: { ...prevState.values, country: value } }))
-                  }
-                  errorCode={this.state.errorCode}
-                />
-              </span>
-            );
-          case FIELDS.HONOR_CODE:
-            honorCode.push(
-              <span key={fieldData.name}>
-                <HonorCode
-                  fieldType={fieldData.type}
-                  value={this.state.values[fieldData.name]}
-                  onChangeHandler={this.onChangeHandler}
-                  errorMessage={this.state.errors[fieldData.name]}
-                />
-              </span>,
-            );
-            return null;
-          case FIELDS.TERMS_OF_SERVICE:
-            honorCode.push(
-              <span key={fieldData.name}>
-                <TermsOfService
-                  value={this.state.values[fieldData.name]}
-                  onChangeHandler={this.onChangeHandler}
-                  errorMessage={this.state.errors[fieldData.name]}
-                />
-              </span>,
-            );
-            return null;
-          default:
-            return (
-              <span key={fieldData.name}>
-                <FormFieldRenderer
-                  fieldData={fieldData}
-                  value={this.state.values[fieldData.name]}
-                  onChangeHandler={this.onChangeHandler}
-                  handleBlur={this.validateDynamicFields}
-                  handleFocus={this.handleOnFocus}
-                  errorMessage={this.state.errors[fieldData.name]}
-                  isRequired
-                />
-              </span>
-            );
-        }
-      })
-    ) : null;
-
     return (
       <>
         <Helmet>
-          <title>{intl.formatMessage(messages['register.page.title'],
-            { siteName: getConfig().SITE_NAME })}
-          </title>
+          <title>{formatMessage(messages['register.page.title'], { siteName: getConfig().SITE_NAME })}</title>
         </Helmet>
         <RedirectLogistration
-          success={this.props.registrationResult.success}
-          redirectUrl={this.props.registrationResult.redirectUrl}
+          host={host}
+          authenticatedUser={registrationResult.authenticatedUser}
+          success={registrationResult.success}
+          redirectUrl={registrationResult.redirectUrl}
           finishAuthUrl={finishAuthUrl}
-          optionalFields={this.props.optionalFields}
-          redirectToWelcomePage={getConfig().ENABLE_PROGRESSIVE_PROFILING
-                 && Object.keys(this.props.optionalFields).length !== 0}
+          optionalFields={optionalFields}
+          registrationEmbedded={registrationEmbedded}
+          redirectToProgressiveProfilingPage={
+            getConfig().ENABLE_PROGRESSIVE_PROFILING_ON_AUTHN && !!Object.keys(optionalFields.fields).length
+          }
         />
-        <div className="mw-xs mt-3">
-          {this.state.errorCode ? (
+        {autoSubmitRegForm && !errorCode.type ? (
+          <div className="mw-xs mt-5 text-center">
+            <Spinner animation="border" variant="primary" id="tpa-spinner" />
+          </div>
+        ) : (
+          <div
+            className={classNames(
+              'mw-xs mt-3',
+              { 'w-100 m-auto pt-4 main-content': registrationEmbedded },
+            )}
+          >
+            <ThirdPartyAuthAlert
+              currentProvider={currentProvider}
+              platformName={platformName}
+              referrer={REGISTER_PAGE}
+            />
             <RegistrationFailure
-              errorCode={this.state.errorCode}
-              failureCount={this.state.failureCount}
-              context={{ provider: currentProvider }}
+              errorCode={errorCode.type}
+              failureCount={errorCode.count}
+              context={{ provider: currentProvider, errorMessage: thirdPartyAuthErrorMessage }}
             />
-          ) : null}
-          {currentProvider && (
-            <>
-              <ThirdPartyAuthAlert
-                currentProvider={currentProvider}
-                platformName={this.props.thirdPartyAuthContext.platformName}
-                referrer={REGISTER_PAGE}
+            <Form id="registration-form" name="registration-form">
+              <NameField
+                name="name"
+                value={formFields.name}
+                shouldFetchUsernameSuggestions={!formFields.username.trim()}
+                handleChange={handleOnChange}
+                handleErrorChange={handleErrorChange}
+                errorMessage={errors.name}
+                helpText={[formatMessage(messages['help.text.name'])]}
+                floatingLabel={formatMessage(messages['registration.fullname.label'])}
               />
-              <h4 className="mt-4 mb-4">{intl.formatMessage(messages['registration.using.tpa.form.heading'])}</h4>
-            </>
-          )}
-          <Form id="registration-form" name="registration-form">
-            <FormGroup
-              name="name"
-              value={this.state.name}
-              autoComplete="on"
-              handleBlur={this.handleOnBlur}
-              handleChange={this.handleOnChange}
-              handleFocus={this.handleOnFocus}
-              errorMessage={this.state.errors.name}
-              helpText={[intl.formatMessage(messages['help.text.name'])]}
-              floatingLabel={intl.formatMessage(messages['registration.fullname.label'])}
-            />
-            <FormGroup
-              name="email"
-              value={this.state.email}
-              autoComplete="on"
-              handleBlur={this.handleOnBlur}
-              handleChange={this.handleOnChange}
-              errorMessage={this.state.errors.email}
-              handleFocus={this.handleOnFocus}
-              helpText={[intl.formatMessage(messages['help.text.email'])]}
-              floatingLabel={intl.formatMessage(messages['registration.email.label'])}
-              borderClass={this.state.emailFieldBorderClass}
-            >
-              {this.renderEmailFeedback()}
-            </FormGroup>
+              <EmailField
+                name="email"
+                value={formFields.email}
+                confirmEmailValue={configurableFormFields?.confirm_email}
+                handleErrorChange={handleErrorChange}
+                handleChange={handleOnChange}
+                errorMessage={errors.email}
+                helpText={[formatMessage(messages['help.text.email'])]}
+                floatingLabel={formatMessage(messages['registration.email.label'])}
+              />
+              {!flags.autoGeneratedUsernameEnabled && (
+                <UsernameField
+                  name="username"
+                  spellCheck="false"
+                  value={formFields.username}
+                  handleChange={handleOnChange}
+                  handleErrorChange={handleErrorChange}
+                  errorMessage={errors.username}
+                  helpText={[formatMessage(messages['help.text.username.1']), formatMessage(messages['help.text.username.2'])]}
+                  floatingLabel={formatMessage(messages['registration.username.label'])}
+                />
+              )}
+              {!currentProvider && (
+                <PasswordField
+                  name="password"
+                  value={formFields.password}
+                  handleChange={handleOnChange}
+                  handleErrorChange={handleErrorChange}
+                  errorMessage={errors.password}
+                  floatingLabel={formatMessage(messages['registration.password.label'])}
+                />
+              )}
+              <ConfigurableRegistrationForm
+                email={formFields.email}
+                fieldErrors={errors}
+                formFields={configurableFormFields}
+                setFieldErrors={registrationEmbedded ? setTemporaryErrors : setErrors}
+                setFormFields={setConfigurableFormFields}
+                autoSubmitRegisterForm={autoSubmitRegForm}
+                fieldDescriptions={fieldDescriptions}
+              />
+              <StatefulButton
+                id="register-user"
+                name="register-user"
+                type="submit"
+                variant="brand"
+                className="register-button mt-4 mb-4"
+                state={submitState}
+                labels={{
+                  default: buttonLabel,
+                  pending: '',
+                }}
+                onClick={handleSubmit}
+                onMouseDown={(e) => e.preventDefault()}
+              />
+              {!registrationEmbedded && (
+                <ThirdPartyAuth
+                  currentProvider={currentProvider}
+                  providers={providers}
+                  secondaryProviders={secondaryProviders}
+                  handleInstitutionLogin={handleInstitutionLogin}
+                  thirdPartyAuthApiStatus={thirdPartyAuthApiStatus}
+                />
+              )}
+            </Form>
+          </div>
+        )}
 
-            <UsernameField
-              name="username"
-              spellCheck="false"
-              value={this.state.username}
-              autoComplete="on"
-              handleBlur={this.handleOnBlur}
-              handleChange={this.handleOnChange}
-              handleFocus={this.handleOnFocus}
-              errorMessage={this.state.errors.username}
-              helpText={[intl.formatMessage(messages['help.text.username.1']), intl.formatMessage(messages['help.text.username.2'])]}
-              floatingLabel={intl.formatMessage(messages['registration.username.label'])}
-              handleSuggestionClick={this.handleSuggestionClick}
-              usernameSuggestions={this.props.usernameSuggestions}
-              handleUsernameSuggestionClose={this.handleUsernameSuggestionClose}
-            />
-
-            {!currentProvider && (
-              <PasswordField
-                name="password"
-                value={this.state.password}
-                autoComplete="off"
-                handleBlur={this.handleOnBlur}
-                handleChange={this.handleOnChange}
-                handleFocus={this.handleOnFocus}
-                errorMessage={this.state.errors.password}
-                floatingLabel={intl.formatMessage(messages['registration.password.label'])}
-              />
-            )}
-            {!(this.showDynamicRegistrationFields)
-            && (
-              <CountryDropdown
-                name="country"
-                floatingLabel={intl.formatMessage(messages['registration.country.label'])}
-                options={this.countryList}
-                value={this.state.country}
-                autoComplete="on"
-                handleBlur={this.handleOnBlur}
-                handleFocus={this.handleOnFocus}
-                errorMessage={this.state.errors.country}
-                errorCode={this.state.errorCode}
-              />
-            )}
-            {formFields}
-            {(getConfig().MARKETING_EMAILS_OPT_IN)
-            && (
-              <Form.Checkbox
-                className="opt-checkbox"
-                name="marketing_emails_opt_in"
-                checked={this.state.marketingOptIn}
-                onChange={(e) => this.props.setRegistrationFormData({
-                  marketingOptIn: e.target.checked,
-                })}
-              >
-                {intl.formatMessage(messages['registration.opt.in.label'], { siteName: getConfig().SITE_NAME })}
-              </Form.Checkbox>
-            )}
-            {!(this.showDynamicRegistrationFields) ? (
-              <HonorCode
-                fieldType="tos_and_honor_code"
-              />
-            ) : <div>{honorCode}</div>}
-            <StatefulButton
-              name="register-user"
-              id="register-user"
-              type="submit"
-              variant="brand"
-              className="register-stateful-button-width mt-4 mb-4"
-              state={submitState}
-              labels={{
-                default: intl.formatMessage(messages['create.account.for.free.button']),
-                pending: '',
-              }}
-              onClick={this.handleSubmit}
-              onMouseDown={(e) => e.preventDefault()}
-            />
-            {this.renderThirdPartyAuth(providers,
-              secondaryProviders,
-              currentProvider,
-              thirdPartyAuthApiStatus,
-              intl)}
-          </Form>
-        </div>
       </>
     );
-  }
+  };
 
-  render() {
-    const { intl, submitState, thirdPartyAuthApiStatus } = this.props;
-    const {
-      currentProvider, finishAuthUrl, providers, secondaryProviders,
-    } = this.props.thirdPartyAuthContext;
-
-    if (this.tpaHint) {
-      if (thirdPartyAuthApiStatus === PENDING_STATE) {
-        return <Skeleton height={36} />;
-      }
-      const { provider, skipHintedLogin } = getTpaProvider(this.tpaHint, providers, secondaryProviders);
-      if (skipHintedLogin) {
-        window.location.href = getConfig().LMS_BASE_URL + provider.registerUrl;
-        return null;
-      }
-      return provider ? (<EnterpriseSSO provider={provider} intl={intl} />)
-        : this.renderForm(
-          currentProvider,
-          providers,
-          secondaryProviders,
-          thirdPartyAuthApiStatus,
-          finishAuthUrl,
-          submitState,
-          intl,
-        );
+  if (tpaHint) {
+    if (thirdPartyAuthApiStatus === PENDING_STATE) {
+      return <Skeleton height={36} />;
     }
-    return this.renderForm(
-      currentProvider,
-      providers,
-      secondaryProviders,
-      thirdPartyAuthApiStatus,
-      finishAuthUrl,
-      submitState,
-      intl,
-    );
+    const { provider, skipHintedLogin } = getTpaProvider(tpaHint, providers, secondaryProviders);
+    if (skipHintedLogin) {
+      window.location.href = getConfig().LMS_BASE_URL + provider.registerUrl;
+      return null;
+    }
+    return provider ? <EnterpriseSSO provider={provider} /> : renderForm();
   }
-}
-
-RegistrationPage.defaultProps = {
-  extendedProfile: [],
-  fieldDescriptions: {},
-  optionalFields: {},
-  registrationResult: null,
-  registerNewUser: null,
-  registrationErrorCode: null,
-  submitState: DEFAULT_STATE,
-  thirdPartyAuthApiStatus: 'pending',
-  thirdPartyAuthContext: {
-    currentProvider: null,
-    finishAuthUrl: null,
-    countryCode: null,
-    providers: [],
-    secondaryProviders: [],
-    pipelineUserDetails: null,
-  },
-  registrationFormData: {
-    country: '',
-    email: '',
-    name: '',
-    password: '',
-    username: '',
-    marketingOptIn: true,
-    errors: {
-      email: '',
-      name: '',
-      username: '',
-      password: '',
-      country: '',
-    },
-    emailFieldBorderClass: '',
-    emailErrorSuggestion: null,
-    emailWarningSuggestion: null,
-  },
-  validationDecisions: null,
-  statusCode: null,
-  usernameSuggestions: [],
+  return (
+    renderForm()
+  );
 };
 
 RegistrationPage.propTypes = {
-  extendedProfile: PropTypes.arrayOf(PropTypes.string),
-  fieldDescriptions: PropTypes.shape({}),
-  optionalFields: PropTypes.shape({}),
-  intl: intlShape.isRequired,
-  getThirdPartyAuthContext: PropTypes.func.isRequired,
-  registerNewUser: PropTypes.func,
-  resetRegistrationForm: PropTypes.func.isRequired,
-  setRegistrationFormData: PropTypes.func.isRequired,
-  registrationResult: PropTypes.shape({
-    redirectUrl: PropTypes.string,
-    success: PropTypes.bool,
-  }),
-  registrationErrorCode: PropTypes.string,
-  submitState: PropTypes.string,
-  thirdPartyAuthApiStatus: PropTypes.string,
-  registrationFormData: PropTypes.shape({
-    country: PropTypes.string,
-    email: PropTypes.string,
-    name: PropTypes.string,
-    password: PropTypes.string,
-    username: PropTypes.string,
-    marketingOptIn: PropTypes.bool,
-    errors: PropTypes.shape({
-      email: PropTypes.string,
-      name: PropTypes.string,
-      username: PropTypes.string,
-      password: PropTypes.string,
-      country: PropTypes.string,
-    }),
-    emailFieldBorderClass: PropTypes.string,
-    emailErrorSuggestion: PropTypes.string,
-    emailWarningSuggestion: PropTypes.string,
-  }),
-  thirdPartyAuthContext: PropTypes.shape({
-    currentProvider: PropTypes.string,
-    platformName: PropTypes.string,
-    providers: PropTypes.array,
-    secondaryProviders: PropTypes.array,
-    finishAuthUrl: PropTypes.string,
-    countryCode: PropTypes.string,
-    pipelineUserDetails: PropTypes.shape({
-      email: PropTypes.string,
-      name: PropTypes.string,
-      firstName: PropTypes.string,
-      lastName: PropTypes.string,
-      username: PropTypes.string,
-    }),
-  }),
-  fetchRealtimeValidations: PropTypes.func.isRequired,
-  validationDecisions: PropTypes.shape({
-    country: PropTypes.string,
-    email: PropTypes.string,
-    name: PropTypes.string,
-    password: PropTypes.string,
-    username: PropTypes.string,
-  }),
-  clearUsernameSuggestions: PropTypes.func.isRequired,
-  statusCode: PropTypes.number,
-  usernameSuggestions: PropTypes.arrayOf(string),
-  institutionLogin: PropTypes.bool.isRequired,
-  handleInstitutionLogin: PropTypes.func.isRequired,
+  institutionLogin: PropTypes.bool,
+  // Actions
+  handleInstitutionLogin: PropTypes.func,
 };
 
-const mapStateToProps = state => {
-  const registrationResult = registrationRequestSelector(state);
-  const thirdPartyAuthContext = thirdPartyAuthContextSelector(state);
-  return {
-    registrationErrorCode: registrationErrorSelector(state),
-    submitState: state.register.submitState,
-    thirdPartyAuthApiStatus: state.commonComponents.thirdPartyAuthApiStatus,
-    registrationResult,
-    thirdPartyAuthContext,
-    validationDecisions: validationsSelector(state),
-    statusCode: state.register.statusCode,
-    usernameSuggestions: usernameSuggestionsSelector(state),
-    registrationFormData: registrationFormDataSelector(state),
-    fieldDescriptions: fieldDescriptionSelector(state),
-    optionalFields: optionalFieldsSelector(state),
-    extendedProfile: extendedProfileSelector(state),
-  };
+RegistrationPage.defaultProps = {
+  handleInstitutionLogin: null,
+  institutionLogin: false,
 };
 
-export default connect(
-  mapStateToProps,
-  {
-    clearUsernameSuggestions,
-    getThirdPartyAuthContext,
-    fetchRealtimeValidations,
-    registerNewUser,
-    resetRegistrationForm,
-    setRegistrationFormData,
-  },
-)(injectIntl(RegistrationPage));
+export default RegistrationPage;

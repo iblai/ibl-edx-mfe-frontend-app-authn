@@ -1,46 +1,48 @@
 import React from 'react';
 
 import { getConfig } from '@edx/frontend-platform';
-import { FormattedMessage, injectIntl, intlShape } from '@edx/frontend-platform/i18n';
-import { Alert } from '@edx/paragon';
-import { CheckCircle, Error } from '@edx/paragon/icons';
+import { FormattedMessage, useIntl } from '@edx/frontend-platform/i18n';
+import { Alert } from '@openedx/paragon';
+import { CheckCircle, Error } from '@openedx/paragon/icons';
 import PropTypes from 'prop-types';
 
 import { ACCOUNT_ACTIVATION_MESSAGE } from './data/constants';
 import messages from './messages';
 
-const AccountActivationMessage = (props) => {
-  const { intl, messageType } = props;
+const AccountActivationMessage = ({ messageType }) => {
+  const { formatMessage } = useIntl();
+
+  if (!messageType) {
+    return null;
+  }
+
   const variant = messageType === ACCOUNT_ACTIVATION_MESSAGE.ERROR ? 'danger' : messageType;
-
-  const activationOrVerification = getConfig().MARKETING_EMAILS_OPT_IN ? 'confirmation' : 'activation';
-
-  let activationMessage;
-  let heading;
-
+  const activationOrConfirmation = getConfig().MARKETING_EMAILS_OPT_IN ? 'confirmation' : 'activation';
   const iconMapping = {
     [ACCOUNT_ACTIVATION_MESSAGE.SUCCESS]: CheckCircle,
     [ACCOUNT_ACTIVATION_MESSAGE.ERROR]: Error,
   };
 
+  let activationMessage;
+  let heading;
   switch (messageType) {
     case ACCOUNT_ACTIVATION_MESSAGE.SUCCESS: {
-      heading = intl.formatMessage(messages[`account.${activationOrVerification}.success.message.title`]);
-      activationMessage = <span>{intl.formatMessage(messages[`account.${activationOrVerification}.success.message`])}</span>;
+      heading = formatMessage(messages[`account.${activationOrConfirmation}.success.message.title`]);
+      activationMessage = <span>{formatMessage(messages[`account.${activationOrConfirmation}.success.message`])}</span>;
       break;
     }
     case ACCOUNT_ACTIVATION_MESSAGE.INFO: {
-      activationMessage = intl.formatMessage(messages[`account.${activationOrVerification}.info.message`]);
+      activationMessage = formatMessage(messages[`account.${activationOrConfirmation}.info.message`]);
       break;
     }
     case ACCOUNT_ACTIVATION_MESSAGE.ERROR: {
       const supportLink = (
         <Alert.Link href={getConfig().ACTIVATION_EMAIL_SUPPORT_LINK}>
-          {intl.formatMessage(messages['account.activation.support.link'])}
+          {formatMessage(messages['account.activation.support.link'])}
         </Alert.Link>
       );
 
-      heading = intl.formatMessage(messages[`account.${activationOrVerification}.error.message.title`]);
+      heading = formatMessage(messages[`account.${activationOrConfirmation}.error.message.title`]);
       activationMessage = (
         <FormattedMessage
           id="account.activation.error.message"
@@ -58,7 +60,7 @@ const AccountActivationMessage = (props) => {
   return activationMessage ? (
     <Alert
       id="account-activation-message"
-      className="mb-4"
+      className="mb-5"
       variant={variant}
       icon={iconMapping[messageType]}
     >
@@ -69,8 +71,11 @@ const AccountActivationMessage = (props) => {
 };
 
 AccountActivationMessage.propTypes = {
-  messageType: PropTypes.string.isRequired,
-  intl: intlShape.isRequired,
+  messageType: PropTypes.string,
 };
 
-export default injectIntl(AccountActivationMessage);
+AccountActivationMessage.defaultProps = {
+  messageType: null,
+};
+
+export default AccountActivationMessage;

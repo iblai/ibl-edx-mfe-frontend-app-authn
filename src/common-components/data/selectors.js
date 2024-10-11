@@ -14,12 +14,15 @@ export const fieldDescriptionSelector = createSelector(
   commonComponents => commonComponents.fieldDescriptions,
 );
 
-export const extendedProfileSelector = createSelector(
-  commonComponentsSelector,
-  commonComponents => commonComponents.extendedProfile,
-);
-
 export const optionalFieldsSelector = createSelector(
   commonComponentsSelector,
   commonComponents => commonComponents.optionalFields,
+);
+
+export const tpaProvidersSelector = createSelector(
+  commonComponentsSelector,
+  commonComponents => ({
+    providers: commonComponents.thirdPartyAuthContext.providers,
+    secondaryProviders: commonComponents.thirdPartyAuthContext.secondaryProviders,
+  }),
 );
