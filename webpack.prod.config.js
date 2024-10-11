@@ -1,6 +1,7 @@
 const { createConfig } = require('@openedx/frontend-build');
 
 const config = createConfig('webpack-prod');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 config.module.rules[0].exclude = /node_modules\/(?!(fastest-levenshtein|@edx))/;
 
