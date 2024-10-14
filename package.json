@@ -80,7 +80,6 @@
     "history": "5.3.0",
     "husky": "7.0.4",
     "jest": "29.7.0",
-    "react-test-renderer": "^17.0.2",
-    "@edx/frontend-build": "^5.6.11"
+    "react-test-renderer": "^17.0.2"
   }
 }
